@@ -1,5 +1,6 @@
 GO := go
-pkgs   = $(shell basename `git rev-parse --show-toplevel`)
+pkgs = $(shell basename `git rev-parse --show-toplevel`)
+BINFILE  = $(shell basename `git rev-parse --show-toplevel`)
 VERSION ?=$(shell git describe --abbrev=0)
 BUILD ?=$(shell date +%FT%T%z)
 GOVERSION ?=$(shell go version | cut --delimiter=" " -f3)
@@ -21,7 +22,7 @@ $(error Invalid GOPATH. There is no src dir in the GOPATH)
 endif
 
 ifeq ($(findstring ${GOPATH},${CUR_DIR}), )
-$(error Wrong directorry for the project. It must be in $GOPATH/github/Percona-Lab/sanitizer)
+$(error Wrong directorry for the project. It must be in $GOPATH/github/Percona-Lab/${BINFILE})
 endif
 
 $(info )
@@ -33,10 +34,10 @@ $(info )
 
 default: prepare
 	@$(info Cleaning old tar files in ${BIN_DIR})
-	@rm -f ${BIN_DIR}/sanitizer_*.tar.gz
+	@rm -f ${BIN_DIR}/${BINFILE}_*.tar.gz
 	@echo
 	@$(info Building in ${BIN_DIR})
-	@go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer main.go
+	@go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/${BINFILE} main.go
 
 prepare:
 	@$(info Checking if ${BIN_DIR} exists)
@@ -46,30 +47,30 @@ all: clean darwin-amd64-tar linux-amd64-tar
 
 clean: prepare
 	@$(info Cleaning binaries and tar.gz files in dir ${BIN_DIR})
-	@rm -f ${BIN_DIR}/sanitizer
-	@rm -f ${BIN_DIR}/sanitizer_*.tar.gz
+	@rm -f ${BIN_DIR}/${BINFILE}
+	@rm -f ${BIN_DIR}/${BINFILE}_*.tar.gz
 
 linux-amd64: prepare
 	@echo "Building linux/amd64 binaries in ${BIN_DIR}"
-	@GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer main.go
+	@GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/${BINFILE} main.go
 
 linux-amd64-tar: linux-amd64
-	@tar cvzf ${BIN_DIR}/sanitizer_linux_amd64.tar.gz -C ${BIN_DIR} sanitizer
+	@tar cvzf ${BIN_DIR}/${BINFILE}_linux_amd64.tar.gz -C ${BIN_DIR} ${BINFILE}
 
 linux-386: prepare
 	@echo "Building linux/386 binaries in ${BIN_DIR}"
-	@GOOS=linux GOARCH=386 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer main.go
+	@GOOS=linux GOARCH=386 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/${BINFILE} main.go
 
 linux-386-tar: linux-386
-	@tar cvzf ${BIN_DIR}/sanitizer_linux_386.tar.gz -C ${BIN_DIR} sanitizer
+	@tar cvzf ${BIN_DIR}/${BINFILE}_linux_386.tar.gz -C ${BIN_DIR} ${BINFILE}
 
 darwin-amd64: 
 	@echo "Building darwin/amd64 binaries in ${BIN_DIR}"
 	@mkdir -p ${BIN_DIR}
-	@GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer main.go
+	@GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/${BINFILE} main.go
 
 darwin-amd64-tar: darwin-amd64
-	@tar cvzf ${BIN_DIR}/sanitizer_darwin_amd64.tar.gz -C ${BIN_DIR} sanitizer
+	@tar cvzf ${BIN_DIR}/${BINFILE}_darwin_amd64.tar.gz -C ${BIN_DIR} ${BINFILE}
 
 style:
 	@echo ">> checking code style"
