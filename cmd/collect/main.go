@@ -3,6 +3,9 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -26,6 +29,7 @@ import (
 type cliOptions struct {
 	BinDir              *string
 	DataDir             *string
+	EncryptPassword     *string
 	NoSanitizeHostnames *bool
 	NoSanitizeQueries   *bool
 	NoDefaultCommads    *bool
@@ -49,6 +53,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.Infof("blocksize: %v\n", aes.BlockSize)
+
 	log.SetLevel(log.DebugLevel)
 	log.Infof("Data directory is %q", *opts.DataDir)
 
@@ -71,10 +77,16 @@ func main() {
 		log.Fatalf("Cannot sanitize files in %q: %s", *opts.DataDir, err)
 	}
 
-	tarfile := fmt.Sprintf(path.Join(*opts.DataDir, path.Base(*opts.DataDir)+".tar.gz"))
-	log.Infof("Creating tar file %q", tarfile)
-	if err = tarit(tarfile, *opts.DataDir); err != nil {
+	tarFile := fmt.Sprintf(path.Join(*opts.DataDir, path.Base(*opts.DataDir)+".tar.gz"))
+	log.Infof("Creating tar file %q", tarFile)
+	if err = tarit(tarFile, *opts.DataDir); err != nil {
 		log.Fatal(err)
+	}
+
+	if *opts.EncryptPassword != "" {
+		encryptedFile := fmt.Sprintf(path.Join(*opts.DataDir, path.Base(*opts.DataDir)+".aes"))
+		log.Infof("Encrypting %q file into %q", tarFile, encryptedFile)
+		encrypt(tarFile, encryptedFile, *opts.EncryptPassword)
 	}
 
 }
@@ -214,8 +226,12 @@ func processCliParams() (*cliOptions, error) {
 		NoDefaultCommads:    app.Flag("no-default-commands", "Do not run the default commands").Bool(),
 		NoSanitizeHostnames: app.Flag("no-sanitize-hostnames", "Don't sanitize host names").Bool(),
 		NoSanitizeQueries:   app.Flag("no-sanitize-queries", "Don't replace queries by their fingerprints").Bool(),
+
 		AdditionalCmds: app.Flag("extra-cmd",
 			"Also run this command as part of the data collection. This parameter can be used more than once").Strings(),
+
+		EncryptPassword: app.Flag("encrypt-password", "Encrypt the output file using this password."+
+			" If ommited, the file won't be encrypted.").String(),
 	}
 	app.Parse(os.Args[1:])
 
@@ -229,6 +245,7 @@ func processCliParams() (*cliOptions, error) {
 	}
 
 	if *options.AskMySQLPass {
+		fmt.Printf("MySQL password for user %q:", *options.MySQLUser)
 		passb, err := terminal.ReadPassword(0)
 		if err != nil {
 			return nil, errors.Wrap(err, "Cannot read MySQL password from the terminal")
@@ -294,4 +311,38 @@ func runCommands(cmds []*exec.Cmd, dataDir string) error {
 	}
 
 	return nil
+}
+
+func encrypt(infile, outfile, pass string) {
+	// We need to ensure the password has the correct size so, we cannot
+	// use a string with a random lenght as a password.
+	password := sha256.Sum256([]byte(pass))
+	key := password[:]
+
+	inFile, err := os.Open(infile)
+	if err != nil {
+		panic(err)
+	}
+	defer inFile.Close()
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	// If the key is unique for each ciphertext, then it's ok to use a zero IV.
+	var iv [aes.BlockSize]byte
+	stream := cipher.NewOFB(block, iv[:])
+
+	outFile, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		panic(err)
+	}
+	defer outFile.Close()
+
+	writer := &cipher.StreamWriter{S: stream, W: outFile}
+	// Copy the input file to the output file, encrypting as we go.
+	if _, err := io.Copy(writer, inFile); err != nil {
+		panic(err)
+	}
 }
