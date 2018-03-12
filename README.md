@@ -35,7 +35,7 @@ Where `$variable` is being replaced by the corresponding command line parameter,
   
 |Flag|Description|
 |-----|-----|
-|--help|Show context-sensitive help (also try --help-long and --help-man).|
+|--help|Show context-sensitive help (also try --help-long and --help-man)|
 
 |--bin-dir|Directory having the Percona Toolkit binaries (if they are not in PATH)|
 |--data-dir|Directory to store the output. By default a directory name with the form ${HOME}/data_collection_YYYY-MM-DD_HH_mm_ss wil be created. The directory may already contain files that will be included into the .tar.gz file|
