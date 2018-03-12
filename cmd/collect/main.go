@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/Percona-Lab/sanitizer/internal/sanitize"
 	"github.com/Percona-Lab/sanitizer/internal/sanitize/util"
 	"github.com/alecthomas/kingpin"
+	"github.com/go-ini/ini"
 	shellwords "github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -28,8 +30,9 @@ import (
 
 type cliOptions struct {
 	BinDir              *string
-	DataDir             *string
-	EncryptPassword     *string
+	DataDir             *string // in case Percona Toolkit is not in the PATH
+	ConfigFile          *string // .my.cnf file
+	EncryptPassword     *string // if set, it will produce an encrypted .aes file
 	NoSanitizeHostnames *bool
 	NoSanitizeQueries   *bool
 	NoDefaultCommads    *bool
@@ -43,7 +46,7 @@ type cliOptions struct {
 
 var (
 	defaultCmds = []string{
-		"pt-stalk --no-stalk --iterations=1 --sleep=3 --host=$mysql-host --dest=$data-dir --port=$mysql-port --user=$mysql-user --password=$mysql-pass",
+		"pt-stalk --no-stalk --iterations=2 --sleep=30 --host=$mysql-host --dest=$data-dir --port=$mysql-port --user=$mysql-user --password=$mysql-pass",
 	}
 )
 
@@ -218,6 +221,7 @@ func processCliParams() (*cliOptions, error) {
 	options := &cliOptions{
 		BinDir:              app.Flag("bin-dir", "Directory having the Percona Toolkit binaries (if they are not in PATH)").String(),
 		DataDir:             app.Flag("data-dir", "Directory having the files to sanitize.").Default(tmpdir).String(),
+		ConfigFile:          app.Flag("config-file", "Path to the config file.").Default("~/.my.cnf").String(),
 		MySQLHost:           app.Flag("mysql-host", "MySQL host").String(),
 		AskMySQLPass:        app.Flag("ask-pass", "Ask MySQL password").Bool(),
 		MySQLPort:           app.Flag("mysql-port", "MySQL port").Int(),
@@ -234,13 +238,14 @@ func processCliParams() (*cliOptions, error) {
 			" If ommited, the file won't be encrypted.").String(),
 	}
 	app.Parse(os.Args[1:])
+	getParamsFromMyCnf(options)
 
 	if *options.BinDir != "" {
 		os.Setenv("PATH", fmt.Sprintf("%s%s%s", *options.BinDir, string(os.PathListSeparator), os.Getenv("PATH")))
 	}
 
 	lp, err := exec.LookPath("pt-summary")
-	if (err != nil || lp == "") && *options.BinDir == "" {
+	if (err != nil || lp == "") && *options.BinDir == "" && !*options.NoDefaultCommads {
 		return nil, errors.New("Cannot find Percona Toolkit binaries. Please run this tool again using --bin-dir parameter")
 	}
 
@@ -345,4 +350,48 @@ func encrypt(infile, outfile, pass string) {
 	if _, err := io.Copy(writer, inFile); err != nil {
 		panic(err)
 	}
+}
+
+func getParamsFromMyCnf(opts *cliOptions) error {
+	if *opts.ConfigFile == "" {
+		return nil
+	}
+	*opts.ConfigFile = expandHomeDir(*opts.ConfigFile)
+
+	cfg, err := ini.Load(*opts.ConfigFile)
+	if err != nil {
+		return errors.Wrapf(err, "Cannot read config from %q", *opts.ConfigFile)
+	}
+
+	sec, err := cfg.GetSection("client")
+	if err != nil {
+		return errors.Wrapf(err, "Cannot read [client] section from %q", *opts.ConfigFile)
+	}
+
+	if val, err := sec.GetKey("user"); err == nil {
+		*opts.MySQLUser = val.String()
+	}
+	if val, err := sec.GetKey("password"); err == nil {
+		*opts.MySQLPass = val.String()
+	}
+	if val, err := sec.GetKey("host"); err == nil {
+		*opts.MySQLHost = val.String()
+	}
+	if val, err := sec.GetKey("port"); err == nil {
+		if *opts.MySQLPort, err = val.Int(); err != nil {
+			return errors.Wrapf(err, "Cannot parse %q as the port number", val.String())
+		}
+	}
+
+	return nil
+}
+
+func expandHomeDir(path string) string {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+
+	if path[:2] == "~/" {
+		path = filepath.Join(dir, path[2:])
+	}
+	return path
 }

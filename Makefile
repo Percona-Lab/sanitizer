@@ -10,6 +10,7 @@ GOPATH ?=${HOME}/go
 MAKE_TARS = ''
 CUR_DIR=$(shell pwd)
 BIN_DIR=${CUR_DIR}/build
+SOURCES=collect encryptor sanitizer
 LDFLAGS="-X main.Version=${VERSION} -X main.Build=${BUILD} -X main.Commit=${COMMIT} -X main.Branch=${BRANCH} -X main.GoVersion=${GOVERSION} -s -w"
 
 ifeq (${GOPATH},)
@@ -36,9 +37,7 @@ default: prepare
 	@rm -f ${BIN_DIR}/collect_*.tar.gz
 	@echo
 	@$(info Building in ${BIN_DIR})
-	@go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/collect cmd/collect/main.go
-	@go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/encryptor cmd/encryptor/main.go
-	@go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer cmd/sanitizer/main.go
+	@$(foreach dir,$(SOURCES),go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/$(dir) cmd/$(dir)/main.go;)
 
 prepare:
 	@$(info Checking if ${BIN_DIR} exists)
@@ -53,9 +52,7 @@ clean: prepare
 
 linux-amd64: prepare
 	@echo "Building linux/amd64 binaries in ${BIN_DIR}"
-	@GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/collect cmd/collect/main.go
-	@GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/encryptor cmd/encryptor/main.go
-	@GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer cmd/sanitizer/main.go
+	@$(foreach dir,$(SOURCES),GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/$(dir) cmd/$(dir)/main.go;)
 
 linux-amd64-tar: linux-amd64
 	@tar cvzf ${BIN_DIR}/collector_linux_amd64.tar.gz -C ${BIN_DIR} collect encryptor sanitizer
@@ -63,12 +60,10 @@ linux-amd64-tar: linux-amd64
 darwin-amd64: 
 	@echo "Building darwin/amd64 binaries in ${BIN_DIR}"
 	@mkdir -p ${BIN_DIR}
-	@GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/collect cmd/collect/main.go
-	@GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/encryptor cmd/encryptor/main.go
-	@GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer cmd/sanitizer/main.go
+	@$(foreach dir,$(SOURCES),GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/$(dir) cmd/$(dir)/main.go;)
 
 darwin-amd64-tar: darwin-amd64
-	@tar cvzf ${BIN_DIR}/collector_darwin_amd64.tar.gz -C ${BIN_DIR} collect encryptor sanitizer
+	@tar cvzf ${BIN_DIR}/collector_darwin_amd64.tar.gz -C ${BIN_DIR} $(SOURCES)
 
 style:
 	@echo ">> checking code style"
