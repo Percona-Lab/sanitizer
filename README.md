@@ -47,7 +47,7 @@ Where `$variable` is being replaced by the corresponding command line parameter,
 |--no-default-commands|Do not run the default commands (pt-stalk)|
 |--no-sanitize-hostnames|Do not sanitize host names|
 |--no-sanitize-queries|Do not replace queries by their fingerprints|
-|--extra-cmd|Also run this command as part of the data collection. This parameter can be used more than once|
+|--extra-cmd|Also run this command as part of the data collection.<br>This parameter can be used more than once|
 |--encrypt-password|Encrypt the output file using this password. If ommited, the file won't be encrypted.|
 
 ##### Usage
