@@ -26,7 +26,7 @@ sanitize < input-file > output-file
   
 This program collects the output of `pt-stalk`, sanitizes the output, compress the files into a `.tar.gz` and encrypts the tar file to be safelly sent to support.  
 By default, it runs: 
-````
+```
 pt-stalk --no-stalk --iterations=2 --sleep=30 --host=$mysql-host --dest=$data-dir --port=$mysql-port --user=$mysql-user --password=$mysql-pass
 ```
 Where `$variable` is being replaced by the corresponding command line parameter, ie, `$mysql-user` is going to be replaced by the value of the `--mysql-user` parameter.
@@ -36,10 +36,9 @@ Where `$variable` is being replaced by the corresponding command line parameter,
 |Flag|Description|
 |-----|-----|
 |--help|Show context-sensitive help (also try --help-long and --help-man)|
-
 |--bin-dir|Directory having the Percona Toolkit binaries (if they are not in PATH)|
-|--data-dir|Directory to store the output. By default a directory name with the form ${HOME}/data_collection_YYYY-MM-DD_HH_mm_ss wil be created. The directory may already contain files that will be included into the .tar.gz file|
-|--config-file|MySQL config file. Default=${HOME}/.my.cnf|
+|--data-dir|Directory to store the output. By default a directory name with the form `${HOME}/data_collection_YYYY-MM-DD_HH_mm_ss` wil be created. The directory may already contain files that will be included into the `.tar.gz` file|
+|--config-file|MySQL config file. Default=`${HOME}/.my.cnf`|
 |--mysql-host|MySQL host|
 |--mysql-port|MySQL port|
 |--mysql-user|MySQL user name|
