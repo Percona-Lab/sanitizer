@@ -32,6 +32,8 @@ pt-stalk --no-stalk --iterations=2 --sleep=30 --host=$mysql-host --dest=$data-di
 Where `$variable` is being replaced by the corresponding command line parameter, ie, `$mysql-user` is going to be replaced by the value of the `--mysql-user` parameter.
 
 #### Flags
+  
+
 |Flag|Description|
 |-----|-----|
 |--help|Show context-sensitive help (also try --help-long and --help-man).|
