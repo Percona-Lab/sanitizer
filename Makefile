@@ -22,7 +22,7 @@ $(error Invalid GOPATH. There is no src dir in the GOPATH)
 endif
 
 ifeq ($(findstring ${GOPATH},${CUR_DIR}), )
-$(error Wrong directorry for the project. It must be in $GOPATH/github/Percona-Lab/mysql_random_data_load)
+$(error Wrong directorry for the project. It must be in $GOPATH/github/Percona-Lab/sanitizer)
 endif
 
 $(info )
@@ -37,7 +37,7 @@ default: prepare
 	@rm -f ${BIN_DIR}/collect_*.tar.gz
 	@echo
 	@$(info Building in ${BIN_DIR})
-	@$(foreach dir,$(SOURCES),go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/$(dir) cmd/$(dir)/main.go;)
+	@go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer *.go
 
 prepare:
 	@$(info Checking if ${BIN_DIR} exists)
@@ -47,23 +47,23 @@ all: clean darwin-amd64-tar linux-amd64-tar
 
 clean: prepare
 	@$(info Cleaning binaries and tar.gz files in dir ${BIN_DIR})
-	@rm -f ${BIN_DIR}/encryptor ${BIN_DIR}/sanitizer ${BIN_DIR}/collect
-	@rm -f ${BIN_DIR}/collector_*.tar.gz
+	@rm -f ${BIN_DIR}/sanitizer
+	@rm -f ${BIN_DIR}/sanitizer_*.tar.gz
 
 linux-amd64: prepare
 	@echo "Building linux/amd64 binaries in ${BIN_DIR}"
-	@$(foreach dir,$(SOURCES),GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/$(dir) cmd/$(dir)/main.go;)
+	@GOOS=linux GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer *.go
 
 linux-amd64-tar: linux-amd64
-	@tar cvzf ${BIN_DIR}/collector_linux_amd64.tar.gz -C ${BIN_DIR} collect encryptor sanitizer
+	@tar cvzf ${BIN_DIR}/sanitizer_linux_amd64.tar.gz -C ${BIN_DIR} sanitizer
 
 darwin-amd64: 
 	@echo "Building darwin/amd64 binaries in ${BIN_DIR}"
 	@mkdir -p ${BIN_DIR}
-	@$(foreach dir,$(SOURCES),GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/$(dir) cmd/$(dir)/main.go;)
+	@GOOS=darwin GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer *.go
 
 darwin-amd64-tar: darwin-amd64
-	@tar cvzf ${BIN_DIR}/collector_darwin_amd64.tar.gz -C ${BIN_DIR} $(SOURCES)
+	@tar cvzf ${BIN_DIR}/sanitizer_darwin_amd64.tar.gz -C ${BIN_DIR} sanitizer
 
 style:
 	@echo ">> checking code style"
