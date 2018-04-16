@@ -17,9 +17,9 @@ import (
 
 	"github.com/Percona-Lab/sanitizer/internal/sanitize"
 	"github.com/Percona-Lab/sanitizer/internal/sanitize/util"
+	log "github.com/Sirupsen/logrus"
 	shellwords "github.com/mattn/go-shellwords"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 func collectData(opts *cliOptions) error {
@@ -34,6 +34,7 @@ func collectData(opts *cliOptions) error {
 	}
 
 	if !*opts.NoSanitize {
+		log.Infof("Sanitizing output collected data")
 		err := processFiles(*opts.TempDir, *opts.IncludeDirs, *opts.TempDir, !*opts.NoSanitizeHostnames, !*opts.NoSanitizeQueries)
 		if err != nil {
 			return errors.Wrapf(err, "Cannot sanitize files in %q", *opts.TempDir)
@@ -68,12 +69,14 @@ func processFiles(dataDir string, includeDirs []string, outputDir string, saniti
 		if len(files) == 0 {
 			return errors.Errorf("There are no files to sanitize in %q", dir)
 		}
+		log.Debug("Sanitization process start")
 
 		for _, file := range files {
 			if file.IsDir() {
 				continue
 			}
 			inputFile := path.Join(dir, file.Name())
+			log.Debugf("Reading %q", inputFile)
 			fh, err := os.Open(inputFile)
 			if err != nil {
 				return errors.Wrapf(err, "Cannot open %q for reading", inputFile)
@@ -83,9 +86,12 @@ func processFiles(dataDir string, includeDirs []string, outputDir string, saniti
 			if err != nil {
 				return errors.Wrapf(err, "Cannot sanitize %q", inputFile)
 			}
+
+			log.Debugf("Sanitizing %q", inputFile)
 			sanitized := sanitize.Sanitize(lines, sanitizeHostnames, sanitizeQueries)
 
 			outfile := path.Join(outputDir, file.Name())
+			log.Debugf("Writing sanitized file to %q", outfile)
 			ofh, err := os.Create(outfile)
 			if err != nil {
 				return errors.Wrapf(err, "Cannot open %q for writing", outfile)
@@ -120,8 +126,10 @@ func tarit(outfile string, srcPaths []string) error {
 		for _, file := range files {
 			// Ignore tar.gz files from previous runs
 			if strings.HasSuffix(file.Name(), ".tar.gz") {
+				log.Debugf("Skipping file %q", file.Name())
 				continue
 			}
+			log.Debugf("Adding %q to the tar file", file.Name())
 			if err := addFile(tw, srcPath, file); err != nil {
 				return errors.Wrapf(err, "Cannot add %q to the tar file %q", file.Name(), outfile)
 			}
@@ -132,6 +140,10 @@ func tarit(outfile string, srcPaths []string) error {
 }
 
 func getCommandsToRun(defaultCmds []string, opts *cliOptions) ([]*exec.Cmd, []string, error) {
+	log.Debug("Default commands to run:")
+	for i, cmd := range defaultCmds {
+		log.Debugf("%02d) %s", i, cmd)
+	}
 	cmdList := []string{}
 	cmds := []*exec.Cmd{}
 	safeCmds := []string{}
@@ -181,13 +193,13 @@ func runCommands(cmds []*exec.Cmd, safeCmds []string, dataDir string) error {
 			return errors.Wrapf(err, "Cannot create output file %s", logFile)
 		}
 
-		log.Infof("Executing %s", safeCmd)
+		log.Infof("Running %s", safeCmd)
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			fh.WriteString(fmt.Sprintf("There was a problem running %s\n%s", safeCmd, err))
 			fh.Write(stdoutStderr)
 			fh.Close()
-			return errors.Wrapf(err, "There was a problem running %s\n%s",
+			return errors.Wrapf(err, "\nThere was a problem running %s\n%s",
 				safeCmd, fmt.Sprintf("See %s for more details.", logFile))
 		}
 		fh.Write(stdoutStderr)

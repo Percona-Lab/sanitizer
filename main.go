@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"github.com/alecthomas/kingpin"
 	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -56,6 +57,22 @@ type cliOptions struct {
 	DontSanitizeQueries   *bool
 }
 
+type myDefaults struct {
+	MySQLHost string
+	MySQLPort int
+	MySQLUser string
+	MySQLPass string
+}
+
+const (
+	DecryptCmd       = "decrypt"
+	EncryptCmd       = "encrypt"
+	CollectCmd       = "collect"
+	SanitizeCmd      = "sanitize"
+	DefaultMySQLHost = "127.0.0.1"
+	DefaultMySQLPort = 3306
+)
+
 var (
 	defaultCmds = []string{
 		"pt-stalk --no-stalk --iterations=2 --sleep=30 --host=$mysql-host --dest=$temp-dir --port=$mysql-port --user=$mysql-user --password=$mysql-pass",
@@ -65,33 +82,41 @@ var (
 )
 
 func main() {
-	opts, err := processCliParams()
+	customFormatter := new(logrus.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	logrus.SetFormatter(customFormatter)
+	customFormatter.FullTimestamp = true
+
+	u, err := user.Current()
+	if err != nil {
+		log.Fatalf("Cannot get current user: %s", err)
+	}
+
+	opts, err := processCliParams(u.HomeDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if _, err = os.Stat(*opts.TempDir); os.IsNotExist(err) {
-		log.Infof("Creating temporary directory: %s", *opts.TempDir)
-		if err = os.Mkdir(*opts.TempDir, os.ModePerm); err != nil {
-			log.Fatalf("Cannot create temporary dirextory %q: %s", *opts.TempDir, err)
-		}
-	}
-
-	if *opts.Debug {
-		log.SetLevel(log.DebugLevel)
-	}
-
 	switch opts.Command {
-	case "collect":
+	case CollectCmd:
+		if _, err = os.Stat(*opts.TempDir); os.IsNotExist(err) {
+			log.Infof("Creating temporary directory: %s", *opts.TempDir)
+			if err = os.Mkdir(*opts.TempDir, os.ModePerm); err != nil {
+				log.Fatalf("Cannot create temporary dirextory %q: %s", *opts.TempDir, err)
+			}
+		}
 		err = collectData(opts)
+		if err != nil && !*opts.NoRemoveTempFiles {
+			log.Fatal(err)
+		}
 		if !*opts.NoRemoveTempFiles {
 			if err = removeTempFiles(*opts.TempDir, !*opts.NoEncrypt); err != nil {
 				log.Fatal(err)
 			}
 		}
-	case "encrypt", "decrypt":
+	case EncryptCmd, DecryptCmd:
 		err = encryptorCmd(opts)
-	case "sanitize":
+	case SanitizeCmd:
 		err = sanitizeFile(opts)
 	}
 	if err != nil {
@@ -100,8 +125,8 @@ func main() {
 }
 
 func removeTempFiles(tempDir string, removeTarFile bool) error {
-	encryptedFile := path.Join(tempDir, path.Base(tempDir)+".aes")
-	tarFile := path.Join(tempDir, path.Base(tempDir)+".tar.gz")
+	encryptedFile := path.Base(tempDir) + ".aes"
+	tarFile := path.Base(tempDir) + ".tar.gz"
 	files, err := ioutil.ReadDir(tempDir)
 	if err != nil {
 		return errors.Wrapf(err, "Cannot get the listing of %q", tempDir)
@@ -118,6 +143,7 @@ func removeTempFiles(tempDir string, removeTarFile bool) error {
 		}
 
 		filename := path.Join(tempDir, file.Name())
+		log.Debugf("Removing file %q", filename)
 		if err = os.Remove(filename); err != nil {
 			log.Warnf("Cannot remove %q: %s", filename, err)
 		}
@@ -125,13 +151,9 @@ func removeTempFiles(tempDir string, removeTarFile bool) error {
 	return nil
 }
 
-func processCliParams() (*cliOptions, error) {
-	u, err := user.Current()
-	if err != nil {
-		return nil, errors.Wrap(err, "Cannot get current user")
-	}
-
-	tmpdir := path.Join(u.HomeDir, fmt.Sprintf("data_collection_%s", time.Now().Format("2006-01-02_15_04_05")))
+func processCliParams(baseTempPath string) (*cliOptions, error) {
+	var err error
+	tmpdir := path.Join(baseTempPath, fmt.Sprintf("data_collection_%s", time.Now().Format("2006-01-02_15_04_05")))
 
 	// Do not remove the extra space after \n. That's to trick the help template to not to remove the new line
 	msg := "Collect, sanitize, pack and encrypt data.\nBy default, this program will collect the output of:"
@@ -142,10 +164,10 @@ func processCliParams() (*cliOptions, error) {
 
 	app := kingpin.New("pt-secure-data", msg)
 	opts := &cliOptions{
-		CollectCommand:  app.Command("collect", "Collect, sanitize, pack and encrypt data from pt-tools."),
-		DecryptCommand:  app.Command("decrypt", "Decrypt an encrypted file. The password will be requested from the terminal."),
-		EncryptCommand:  app.Command("encrypt", "Encrypt a file. The password will be requested from the terminal."),
-		SanitizeCommand: app.Command("sanitize", "Replace queries in a file by their fingerprints and obfuscate hostnames."),
+		CollectCommand:  app.Command(CollectCmd, "Collect, sanitize, pack and encrypt data from pt-tools."),
+		DecryptCommand:  app.Command(DecryptCmd, "Decrypt an encrypted file. The password will be requested from the terminal."),
+		EncryptCommand:  app.Command(EncryptCmd, "Encrypt a file. The password will be requested from the terminal."),
+		SanitizeCommand: app.Command(SanitizeCmd, "Replace queries in a file by their fingerprints and obfuscate hostnames."),
 		Debug:           app.Flag("debug", "Enable debug log level.").Bool(),
 	}
 	// Decrypt command flags
@@ -165,7 +187,7 @@ func processCliParams() (*cliOptions, error) {
 	opts.MySQLHost = opts.CollectCommand.Flag("mysql-host", "MySQL host.").String()
 	opts.MySQLPort = opts.CollectCommand.Flag("mysql-port", "MySQL port.").Int()
 	opts.MySQLUser = opts.CollectCommand.Flag("mysql-user", "MySQL user name.").String()
-	opts.MySQLPass = opts.CollectCommand.Flag("mysql-pass", "MySQL password.").String()
+	opts.MySQLPass = opts.CollectCommand.Flag("mysql-password", "MySQL password.").String()
 	opts.AskMySQLPass = opts.CollectCommand.Flag("ask-mysql-pass", "Ask MySQL password.").Bool()
 	// Aditional flags
 	opts.AdditionalCmds = opts.CollectCommand.Flag("extra-cmd",
@@ -191,14 +213,16 @@ func processCliParams() (*cliOptions, error) {
 		return nil, err
 	}
 
+	if *opts.Debug {
+		log.SetLevel(log.DebugLevel)
+	}
+
 	*opts.BinDir = expandHomeDir(*opts.BinDir)
 	*opts.ConfigFile = expandHomeDir(*opts.ConfigFile)
 	*opts.TempDir = expandHomeDir(*opts.TempDir)
 	for _, incDir := range *opts.IncludeDirs {
 		incDir = expandHomeDir(incDir)
 	}
-
-	getParamsFromMyCnf(opts)
 
 	if *opts.BinDir != "" {
 		os.Setenv("PATH", fmt.Sprintf("%s%s%s", *opts.BinDir, string(os.PathListSeparator), os.Getenv("PATH")))
@@ -209,68 +233,136 @@ func processCliParams() (*cliOptions, error) {
 		return nil, errors.New("Cannot find Percona Toolkit binaries. Please run this tool again using --bin-dir parameter")
 	}
 
-	if *opts.AskMySQLPass {
-		fmt.Printf("MySQL password for user %q:", *opts.MySQLUser)
-		passb, err := terminal.ReadPassword(0)
-		if err != nil {
-			return nil, errors.Wrap(err, "Cannot read MySQL password from the terminal")
+	switch opts.Command {
+	case CollectCmd:
+		mycnf, err := getParamsFromMyCnf(*opts.ConfigFile)
+		if err == nil {
+			if err = validateMySQLParams(opts, mycnf); err != nil {
+				return nil, err
+			}
 		}
-		*opts.MySQLPass = string(passb)
+		if *opts.AskMySQLPass {
+			if err = askMySQLPassword(opts); err != nil {
+				return nil, err
+			}
+		}
+		err = askEncryptionPassword(opts, true)
+	case EncryptCmd:
+		err = askEncryptionPassword(opts, true)
+	case DecryptCmd:
+		err = askEncryptionPassword(opts, false)
 	}
-
-	if !*opts.NoEncrypt && *opts.EncryptPassword == "" {
-		fmt.Print("Encryption password: ")
-		passa, err := terminal.ReadPassword(0)
-		if err != nil {
-			return nil, errors.Wrap(err, "Cannot read encryption password from the terminal")
-		}
-		fmt.Print("\nRe type password: ")
-		passb, err := terminal.ReadPassword(0)
-		if err != nil {
-			return nil, errors.Wrap(err, "Cannot read encryption password confirmation from the terminal")
-		}
-		fmt.Println("")
-		if string(passa) != string(passb) {
-			return nil, errors.New("Passwords don't match")
-		}
-		*opts.EncryptPassword = string(passa)
+	if err != nil {
+		return nil, err
 	}
 
 	return opts, nil
 }
 
-func getParamsFromMyCnf(opts *cliOptions) error {
-	if *opts.ConfigFile == "" {
-		return nil
+func validateMySQLParams(opts *cliOptions, mycnf *myDefaults) error {
+	if *opts.MySQLPort == 0 && mycnf.MySQLPort > 0 {
+		log.Debugf("Setting default port from config file")
+		*opts.MySQLPort = mycnf.MySQLPort
 	}
-	*opts.ConfigFile = expandHomeDir(*opts.ConfigFile)
+	if *opts.MySQLHost == "" && mycnf.MySQLHost != "" {
+		*opts.MySQLHost = mycnf.MySQLHost
+		log.Debugf("Setting default host from config file")
+	}
+	if *opts.MySQLUser == "" && mycnf.MySQLUser != "" {
+		log.Debugf("Setting default user from config file")
+		*opts.MySQLUser = mycnf.MySQLUser
+	}
+	if *opts.MySQLPass == "" && mycnf.MySQLPass != "" {
+		log.Debugf("Setting default password from config file")
+		*opts.MySQLPass = mycnf.MySQLPass
+	}
 
-	cfg, err := ini.Load(*opts.ConfigFile)
+	if *opts.MySQLHost == "" {
+		log.Debugf("MySQL host is empty. Setting it to %s", DefaultMySQLHost)
+		*opts.MySQLHost = DefaultMySQLHost
+	}
+	if *opts.MySQLPort == 0 {
+		log.Debugf("MySQL port is empty. Setting it to %d", DefaultMySQLPort)
+		*opts.MySQLPort = DefaultMySQLPort
+	}
+	if *opts.MySQLUser == "" {
+		return fmt.Errorf("MySQL user cannot be empty")
+	}
+
+	return nil
+}
+
+func askMySQLPassword(opts *cliOptions) error {
+	if *opts.AskMySQLPass {
+		fmt.Printf("MySQL password for user %q:", *opts.MySQLUser)
+		passb, err := terminal.ReadPassword(0)
+		if err != nil {
+			return errors.Wrap(err, "Cannot read MySQL password from the terminal")
+		}
+		*opts.MySQLPass = string(passb)
+	}
+	return nil
+}
+
+func askEncryptionPassword(opts *cliOptions, requireConfirmation bool) error {
+	if !*opts.NoEncrypt && *opts.EncryptPassword == "" {
+		fmt.Print("Encryption password: ")
+		passa, err := terminal.ReadPassword(0)
+		if err != nil {
+			return errors.Wrap(err, "Cannot read encryption password from the terminal")
+		}
+		fmt.Println("")
+		if requireConfirmation {
+			fmt.Print("Re type password: ")
+			passb, err := terminal.ReadPassword(0)
+			if err != nil {
+				return errors.Wrap(err, "Cannot read encryption password confirmation from the terminal")
+			}
+			fmt.Println("")
+			if string(passa) != string(passb) {
+				return errors.New("Passwords don't match")
+			}
+		}
+		*opts.EncryptPassword = string(passa)
+	}
+	return nil
+}
+
+func getParamsFromMyCnf(configFile string) (*myDefaults, error) {
+	log.Debugf("Reading default MySQL parameters from config file: %q", configFile)
+	if configFile == "" {
+		return nil, fmt.Errorf("Config file cannot be empty")
+	}
+	configFile = expandHomeDir(configFile)
+
+	cfg, err := ini.Load(configFile)
 	if err != nil {
-		return errors.Wrapf(err, "Cannot read config from %q", *opts.ConfigFile)
+		return nil, errors.Wrapf(err, "Cannot read config from %q", configFile)
 	}
 
 	sec, err := cfg.GetSection("client")
 	if err != nil {
-		return errors.Wrapf(err, "Cannot read [client] section from %q", *opts.ConfigFile)
+		return nil, errors.Wrapf(err, "Cannot read [client] section from %q", configFile)
 	}
+
+	mycnf := &myDefaults{}
 
 	if val, err := sec.GetKey("user"); err == nil {
-		*opts.MySQLUser = val.String()
+		mycnf.MySQLUser = val.String()
 	}
 	if val, err := sec.GetKey("password"); err == nil {
-		*opts.MySQLPass = val.String()
+		mycnf.MySQLPass = val.String()
 	}
 	if val, err := sec.GetKey("host"); err == nil {
-		*opts.MySQLHost = val.String()
+		mycnf.MySQLHost = val.String()
 	}
 	if val, err := sec.GetKey("port"); err == nil {
-		if *opts.MySQLPort, err = val.Int(); err != nil {
-			return errors.Wrapf(err, "Cannot parse %q as the port number", val.String())
+		if mycnf.MySQLPort, err = val.Int(); err != nil {
+			return nil, errors.Wrapf(err, "Cannot parse %q as the port number", val.String())
 		}
 	}
-
-	return nil
+	log.Debugf("mycnf: %+v\n", *mycnf)
+	return mycnf, nil
 }
 
 func expandHomeDir(path string) string {

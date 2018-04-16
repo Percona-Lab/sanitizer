@@ -43,7 +43,7 @@ prepare:
 	@$(info Checking if ${BIN_DIR} exists)
 	@mkdir -p ${BIN_DIR}
 
-all: clean darwin-amd64-tar linux-amd64-tar 
+all: clean darwin-amd64-tar linux-amd64-tar windows-amd64-tar
 
 clean: prepare
 	@$(info Cleaning binaries and tar.gz files in dir ${BIN_DIR})
@@ -64,6 +64,13 @@ darwin-amd64:
 
 darwin-amd64-tar: darwin-amd64
 	@tar cvzf ${BIN_DIR}/sanitizer_darwin_amd64.tar.gz -C ${BIN_DIR} sanitizer
+
+windows-amd64: prepare
+	@echo "Building windows/amd64 binaries in ${BIN_DIR}"
+	@GOOS=windows GOARCH=amd64 go build -ldflags ${LDFLAGS} -o ${BIN_DIR}/sanitizer.exe *.go
+
+windows-amd64-tar: windows-amd64
+	@tar cvzf ${BIN_DIR}/sanitizer_windows_amd64.tar.gz -C ${BIN_DIR} sanitizer.exe
 
 style:
 	@echo ">> checking code style"
