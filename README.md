@@ -1,81 +1,80 @@
-# Logs Sanitizer
+# pt-secure-data
+Collect, sanitize, pack and encrypt data. By default, this program will collect the output of:
 
-This is a set of tools to sanitize log files and encrypt them to safelly send them to support.  
-The tools are:
+- `pt-stalk --no-stalk --iterations=2 --sleep=30 --host=$mysql-host --dest=$temp-dir --port=$mysql-port --user=$mysql-user --password=$mysql-pass`
+- `pt-summary`
+- `pt-mysql-summary --host=$mysql-host --port=$mysql-port --user=$mysql-user --password=$mysql-pass`
 
-### Sanitizer
 
-Replaces all the queries in a file by their fingerprints and also replaces hostnames by the text `<hostname>`.
-It reads text from the standard input and the output is sent to the standard output to make it able to use in Linux pipes.  
 
-#### Flags
+Usage:  
+```
+pt-secure-data [<flags>] <command> [<args> ...]
+```
+
+
+### Global flags
 |Flag|Description|
 |-----|-----|
 |--help|Show context-sensitive help (also try --help-long and --help-man).|
-|--input-file=INPUT-FILE|Input file. If not specified, the input will be Stdin.|
-|--outout-file=OUTOUT-FILE|Output file. If not specified, the input will be Stdout.|
+|--debug|Enable debug log level.|
+
+### **Commands**
+#### **Help command**
+Show help
+
+#### **Collect command**
+Collect, sanitize, pack and encrypt data from pt-tools.
+Usage:
+```
+sanitizer collect <flags>
+```
+
+|Flag|Description|
+|-----|-----|
+|--bin-dir|Directory having the Percona Toolkit binaries (if they are not in PATH).|
+|--temp-dir|Temporary directory used for the data collection. Default: ${HOME}/data_collection\_{timestamp}| 
+|--include-dir|Include this dir into the sanitized tar file|
+|--config-file|Path to the config file. Default: `~/.my.cnf`|
+|--mysql-host|MySQL host. Default: `127.0.0.1`|
+|--mysql-port|MySQL port. Default: `3306`|
+|--mysql-user|MySQL user name.|
+|--mysql-password|MySQL password.|
+|--ask-mysql-pass|Ask MySQL password.|
+|--extra-cmd|Also run this command as part of the data collection. This parameter can be used more than once.|
+|--encrypt-password|Encrypt the output file using this password.<br>If ommited, it will be asked in the command line.|
+|--no-collect|Do not collect data|
+|--no-sanitize|Do not sanitize data|
+|--no-encrypt|Do not encrypt the output file.|
 |--no-sanitize-hostnames|Do not sanitize host names.|
-|--no-sanitize-queries|Do not replace queries by their fingerprints|
-  
-#### Usage
+|--no-sanitize-queries|Do not replace queries by their fingerprints.|
+|--no-remove-temp-files|Do not remove temporary files.|
+
+#### **Decrypt command**
+Decrypt an encrypted file. The password will be requested from the terminal.  
+Usage: 
 ```
-sanitize < input-file > output-file
+sanitizer decrypt <input file> <output file>
 ```
 
-### Collector
-  
-This program collects the output of `pt-stalk`, sanitizes the output, compress the files into a `.tar.gz` and encrypts the tar file to be safelly sent to support.  
-By default, it runs: 
+#### **Encrypt command**
+Encrypt a file. The password will be requested from the terminal.  
+Usage: 
 ```
-pt-stalk --no-stalk --iterations=2 --sleep=30 --host=$mysql-host --dest=$data-dir --port=$mysql-port --user=$mysql-user --password=$mysql-pass
-```
-Where `$variable` is being replaced by the corresponding command line parameter, ie, `$mysql-user` is going to be replaced by the value of the `--mysql-user` parameter.
+sanitizer encrypt <input file> <output file>
+```  
 
-#### Flags
+#### **Sanitize command**
+Replace queries in a file by their fingerprints and obfuscate hostnames.  
+Usage:
+```
+sanitizer sanitize [flags]
+```
   
 |Flag|Description|
 |-----|-----|
-|--help|Show context-sensitive help (also try --help-long and --help-man)|
-|--bin-dir|Directory having the Percona Toolkit binaries (if they are not in PATH)|
-|--data-dir|Directory to store the output.<br>By default a directory name with the form:<br>`${HOME}/data_collection_YYYY-MM-DD_HH_mm_ss` wil be created.<br>The directory may already contain files that will be included into the `.tar.gz` file|
-|--config-file|MySQL config file. Default=`${HOME}/.my.cnf`|
-|--mysql-host|MySQL host|
-|--mysql-port|MySQL port|
-|--mysql-user|MySQL user name|
-|--mysql-pass|MySQL password|
-|--ask-pass|Ask MySQL password|
-|--no-default-commands|Do not run the default commands (pt-stalk)|
-|--no-sanitize-hostnames|Do not sanitize host names|
-|--no-sanitize-queries|Do not replace queries by their fingerprints|
-|--extra-cmd|Also run this command as part of the data collection.<br>This parameter can be used more than once|
-|--encrypt-password|Encrypt the output file using this password. If ommited, the file won't be encrypted.|
-
-##### Usage
-1. Collects the data and encrypt the output using a password  
-```
-collect --encrypt-password=a-secure-password
-```
-2. Collect if Percona Toolkit is not in the PATH
-```
-collect --bin-dir=path/to/percona/toolkit --encrypt-password=a-secure-password
-```
-3. Do not run `pt-stalk`, just collect, compress and encrypt existing files  
-```
-collect --no-default-commands --data-dir=/path/to/existing/files --encrypt-password=a-secure-password
-```
-
-### Encrypt/Decrypt 
-
-This program can encrypt/decrypt a file using AES algorithm.  
-It mainly purpose is to decrypt the file encrypted by the collector.
-
-##### Usage
-1. Decrypt a file
-```
-encryptor decrypt <encrypted file> <unencrypted file>
-```
-2. Encrypt a file
-```
-encryptor encrypt <unencrypted file> <encrypted file>
-```
+|--input-file| Input file. If not specified, the input will be Stdin.|
+|--output-file|Output file. If not specified, the input will be Stdout.|
+|--no-sanitize-hostnames|Do not sanitize host names.|
+|--no-sanitize-queries|Do not replace queries by their fingerprints.|
 
