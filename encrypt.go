@@ -6,7 +6,10 @@ import (
 	"crypto/sha256"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 )
 
@@ -15,8 +18,16 @@ func encryptorCmd(opts *cliOptions) (err error) {
 
 	switch opts.Command {
 	case "decrypt":
+		if *opts.DecryptOutFile == "" && strings.HasSuffix(*opts.DecryptInFile, ".aes") {
+			*opts.DecryptOutFile = strings.TrimSuffix(filepath.Base(*opts.DecryptInFile), ".aes")
+		}
+		log.Infof("Decrypting file %q into %q", *opts.DecryptInFile, *opts.DecryptOutFile)
 		err = decrypt(*opts.DecryptInFile, *opts.DecryptOutFile, password)
 	case "encrypt":
+		if *opts.EncryptOutFile == "" {
+			*opts.EncryptOutFile = filepath.Base(*opts.EncryptInFile) + ".aes"
+		}
+		log.Infof("Encrypting file %q into %q", *opts.EncryptInFile, *opts.EncryptOutFile)
 		err = encrypt(*opts.EncryptInFile, *opts.EncryptOutFile, password)
 	}
 	return

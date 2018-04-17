@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -92,7 +94,7 @@ func main() {
 		log.Fatalf("Cannot get current user: %s", err)
 	}
 
-	opts, err := processCliParams(u.HomeDir)
+	opts, err := processCliParams(u.HomeDir, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -151,7 +153,7 @@ func removeTempFiles(tempDir string, removeTarFile bool) error {
 	return nil
 }
 
-func processCliParams(baseTempPath string) (*cliOptions, error) {
+func processCliParams(baseTempPath string, usageWriter io.Writer) (*cliOptions, error) {
 	var err error
 	tmpdir := path.Join(baseTempPath, fmt.Sprintf("data_collection_%s", time.Now().Format("2006-01-02_15_04_05")))
 
@@ -163,6 +165,11 @@ func processCliParams(baseTempPath string) (*cliOptions, error) {
 	msg += "\n "
 
 	app := kingpin.New("pt-secure-data", msg)
+	if usageWriter != nil {
+		app.UsageWriter(usageWriter)
+		app.Terminate(nil)
+	}
+
 	opts := &cliOptions{
 		CollectCommand:  app.Command(CollectCmd, "Collect, sanitize, pack and encrypt data from pt-tools."),
 		DecryptCommand:  app.Command(DecryptCmd, "Decrypt an encrypted file. The password will be requested from the terminal."),
@@ -172,11 +179,11 @@ func processCliParams(baseTempPath string) (*cliOptions, error) {
 	}
 	// Decrypt command flags
 	opts.DecryptInFile = opts.DecryptCommand.Arg("infile", "Encrypted file.").Required().String()
-	opts.DecryptOutFile = opts.DecryptCommand.Arg("outfile", "Unencrypted file.").Required().String()
+	opts.DecryptOutFile = opts.DecryptCommand.Flag("outfile", "Unencrypted file. Default: same name without .aes extension").String()
 
 	// Encrypt command flags
 	opts.EncryptInFile = opts.EncryptCommand.Arg("infile", "Unencrypted file.").Required().String()
-	opts.EncryptOutFile = opts.EncryptCommand.Arg("outfile", "Encrypted file.").Required().String()
+	opts.EncryptOutFile = opts.EncryptCommand.Flag("outfile", "Encrypted file. Default: <input file>.aes").String()
 
 	// Collect command flags
 	opts.BinDir = opts.CollectCommand.Flag("bin-dir", "Directory having the Percona Toolkit binaries (if they are not in PATH).").String()
@@ -250,8 +257,12 @@ func processCliParams(baseTempPath string) (*cliOptions, error) {
 	case EncryptCmd:
 		err = askEncryptionPassword(opts, true)
 	case DecryptCmd:
+		if !strings.HasSuffix(*opts.DecryptInFile, ".aes") && *opts.DecryptOutFile == "" {
+			return nil, fmt.Errorf("Input file does not have .aes extension. I cannot infer the output file")
+		}
 		err = askEncryptionPassword(opts, false)
 	}
+
 	if err != nil {
 		return nil, err
 	}

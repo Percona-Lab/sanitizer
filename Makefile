@@ -48,6 +48,7 @@ all: clean darwin-amd64-tar linux-amd64-tar windows-amd64-tar
 clean: prepare
 	@$(info Cleaning binaries and tar.gz files in dir ${BIN_DIR})
 	@rm -f ${BIN_DIR}/sanitizer
+	@rm -f ${BIN_DIR}/sanitizer.exe
 	@rm -f ${BIN_DIR}/sanitizer_*.tar.gz
 
 linux-amd64: prepare
